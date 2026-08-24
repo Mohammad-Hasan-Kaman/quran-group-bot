@@ -1,0 +1,15 @@
+{
+  "name": "quran-group-bot",
+  "version": "1.0.0",
+  "description": "Bale Messenger bot for Quran reading group - weekly juz rotation & hadith sharing",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "setup-webhook": "curl http://localhost:8787/setup",
+    "status": "curl http://localhost:8787/api/status"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
