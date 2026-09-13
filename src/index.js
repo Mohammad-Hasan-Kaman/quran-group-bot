@@ -53,7 +53,7 @@ const HADITHS = [
 ];
 
 // --- HELPERS ---
-const P = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','９'];
+const P = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
 function toFA(n) { return String(n).replace(/\d/g, d => P[+d]); }
 
 const MF = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
@@ -213,6 +213,9 @@ async function handleUpdate(update, env) {
     if (pv.length > 4000) {
       await sendPhoto(env, uid, s.img, `📸 عکس هفته ${toFA(s.cw)}`);
       await sendMsg(env, uid, s.msg.substring(0, 3900));
+    } else if (s.msg.length > 1000) {
+      await sendPhoto(env, uid, s.img, `📸 عکس هفته ${toFA(s.cw)}`);
+      await sendMsg(env, uid, pv.length > 4000 ? s.msg.substring(0, 3900) : pv);
     } else {
       await sendPhoto(env, uid, s.img, pv);
     }
@@ -225,7 +228,7 @@ async function handleUpdate(update, env) {
   else if (text === '/status') {
     const dr = dateRange(s.cw);
     const stText = { idle: '🟢 آماده دریافت دستور', waiting_for_image: '📸 منتظر دریافت عکس', waiting_for_approval: '⏳ منتظر تایید شما', message_ready: '✅ پیام تایید شده - منتظر ارسال شنبه' };
-    await sendMsg(env, uid, `📊 وضعیت ربات ختم قرآن\n\nهفته ${toFA(s.cw)} از ${toFA(CONFIG.TOTAL_WEEKS)}\nتاریخ: ${dr}\nحدیث: ${toFA(s.hi+1)} از ${toFA(HADITHS.length)}\n\nوضعیت: ${stText[s.st] || s.st}`);
+    await sendMsg(env, uid, `📊 وضعیت ربات ختم قرآن\n\nهفته ${toFA(s.cw)} از ${toFA(CONFIG.TOTAL_WEEKS)}\nتاریخ: ${dr}\nحدیث: ${toFA((s.hi % HADITHS.length)+1)} از ${toFA(HADITHS.length)}\n\nوضعیت: ${stText[s.st] || s.st}`);
   }
   else if (text === '/list') await sendMsg(env, uid, `👥 لیست جزءخوانی هفته ${toFA(s.cw)}\nتاریخ: ${dateRange(s.cw)}\n\nسهم تلاوتی ⬅️ خانمها\n\n${juzList(s.cw)}`);
   else if (text === '/preview') {
@@ -234,7 +237,7 @@ async function handleUpdate(update, env) {
   }
   else if (text.startsWith('/setweek ')) {
     const n = parseInt(text.split(' ')[1]);
-    if (n >= 1 && n <= CONFIG.TOTAL_WEEKS) { s.cw = n; s.hi = Math.max(0,n-6); s.st = 'idle'; await saveState(kv,s); await sendMsg(env,uid,`✅ هفته ${toFA(n)} تنظیم شد.`); }
+    if (n >= 1 && n <= CONFIG.TOTAL_WEEKS) { s.cw = n; s.hi = Math.max(0,n-6); s.st = 'idle'; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`✅ هفته ${toFA(n)} تنظیم شد.`); }
     else await sendMsg(env, uid, `❌ عدد بین ۱ تا ${toFA(CONFIG.TOTAL_WEEKS)}`);
   }
   else if (text === '/skip') { s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`⏭️ رد شد. هفته بعد: ${toFA(s.cw)}`); }
@@ -283,7 +286,12 @@ async function handleCron(env) {
     const pk = `posted_w${s.cw}`;
     if (!flags[pk]) {
       let ok = false;
-      if (s.img) { const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, s.msg); ok = r.ok; }
+      if (s.img && s.msg && s.msg.length > 1000) {
+        const r1 = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `📸 هفته ${toFA(s.cw)}`);
+        const r2 = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
+        ok = r1.ok && r2.ok;
+      }
+      else if (s.img) { const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, s.msg); ok = r.ok; }
       else { const r = await sendMsg(env, CONFIG.GROUP_ID, s.msg); ok = r.ok; }
       if (ok) {
         s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null;
@@ -339,7 +347,7 @@ export default {
 
       const update = parseUpdate(body);
       if (update) {
-        try { await handleUpdate(update, env.KV); } catch(e) { console.error('Update error:', e); }
+        try { await handleUpdate(update, env); } catch(e) { console.error('Update error:', e); }
       }
       return new Response('OK');
     }
