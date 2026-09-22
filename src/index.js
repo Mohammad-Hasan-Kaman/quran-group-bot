@@ -89,7 +89,6 @@ function stateLabel(st) {
 }
 
 // --- HELP / GUIDANCE ---
-// --- HELP / GUIDANCE ---
 const HELP_ALL = `راهنمای دستورات 🤖
 
 📋 وضعیت:
@@ -307,7 +306,7 @@ async function handleUpdate(update, env) {
     await sendMsg(env, uid, `📋 پیش‌نمایش پیام هفته ${toFA(s.cw)}:\n\n${previewMsg}`);
   }
   else if (text.startsWith('/setweek ')) {
-    const n = parseInt(text.split(' ')[1]);
+    const n = parseNum(text.split(' ')[1]);
     if (n >= 1 && n <= CONFIG.TOTAL_WEEKS) { s.cw = n; s.hi = Math.max(0,n-6); s.st = 'idle'; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`✅ هفته ${toFA(n)} تنظیم شد.`); }
     else await sendMsg(env, uid, `❌ عدد بین ۱ تا ${toFA(CONFIG.TOTAL_WEEKS)} وارد کنید.\nمثال: /setweek 17`);
   }
@@ -407,9 +406,14 @@ async function handleCron(env) {
       
         // FIX: Send single message with photo + caption (no separate messages)
         if (s.img) {
-          const captionText = `📸 هفته ${toFA(s.cw)}\n\n${s.msg}`;
-          const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, captionText);
-          ok = r.ok;
+          if (s.msg.length > 1000) {
+            const r1 = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `\u0639\u06a9 \u0647\u0641\u062a ${toFA(s.cw)}`);
+            const r2 = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
+            ok = r1.ok && r2.ok;
+          } else {
+            const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `\u0639\u06a9 \u0647\u0641\u062a ${toFA(s.cw)}\n\n${s.msg}`);
+            ok = r.ok;
+          }
         } else {
           const r = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
           ok = r.ok;

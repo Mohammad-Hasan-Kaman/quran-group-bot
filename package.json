@@ -1,6 +1,6 @@
 {
   "name": "quran-group-bot",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Bale Messenger bot for Quran reading group - weekly juz rotation & hadith sharing",
   "private": true,
   "scripts": {

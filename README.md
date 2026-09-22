@@ -1,6 +1,6 @@
 # 🤲 Quran Group Bot
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.2.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Cloudflare%20Workers-orange?style=for-the-badge&logo=cloudflare)
 ![Stars](https://img.shields.io/github/stars/Mohammad-Hasan-Kaman/quran-group-bot?style=for-the-badge&logo=github&color=blue)
