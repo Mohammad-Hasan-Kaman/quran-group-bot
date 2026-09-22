@@ -150,6 +150,10 @@ https://quran-group-bot.<your-subdomain>.workers.dev/
 | `/help` | Show all commands |
 | `/list` | Show juz assignments for current week |
 | `/preview` | Show the pending message preview |
+| `/members` | List all members with numbers |
+| `/add <name>` | Add a new member |
+| `/del <number|name>` | Delete a member |
+| `/edit <number> <new name>` | Edit member name |
 | `/setweek <N>` | Set current week number (1-30) |
 | `/skip` | Skip current week and advance |
 | `/reset` | Reset bot state to idle |
@@ -212,17 +216,19 @@ const HADITHS = [
 ];
 ```
 
-## Modifying the People List
+## Modifying the Members List
 
-Edit the `PEOPLE` array in `src/index.js`. Order matters — it determines juz rotation:
+The member list is stored in KV (`member_names`) and can be modified **at runtime** via bot commands — no code edit or redeploy needed. If no KV entry exists, the bot falls back to the `PEOPLE` array in `src/index.js`.
 
-```javascript
-const PEOPLE = [
-  'نام نفر اول',    // index 0 → week 1: juz 1
-  'نام نفر دوم',    // index 1 → week 1: juz 2
-  // ... 30 people total
-];
-```
+| Command | Example | Effect |
+|---------|---------|--------|
+| `/members` | — | Show numbered list |
+| `/add <name>` | `/add فاطمه احمدی` | Append member |
+| `/del <number>` | `/del 12` | Remove by number |
+| `/del <name>` | `/del سلیمانی` | Remove by exact name |
+| `/edit <number> <new>` | `/edit 12 فاطمه رضایی` | Rename member |
+
+Juz rotation uses `CONFIG.TOTAL_JUZ` (30), so wrap is always 1→30 regardless of member count.
 
 ## Troubleshooting
 

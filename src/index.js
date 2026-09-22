@@ -78,8 +78,9 @@ function dateRange(wn) {
     : `${toFA(ss.dy)} ${MF[ss.mo-1]} تا ${toFA(sf.dy)} ${MF[sf.mo-1]}`;
 }
 
-function juzList(wn) {
-  return PEOPLE.map((nm,i) => `جزء ${toFA(((i+wn-1)%CONFIG.TOTAL_JUZ)+1)}. ${nm}`).join('\n');
+function juzList(wn, arr) {
+  const a = (arr && arr.length) ? arr : PEOPLE;
+  return a.map((nm,i) => `جزء ${toFA(((i+wn-1)%CONFIG.TOTAL_JUZ)+1)}. ${nm}`).join('\n');
 }
 
 function stateLabel(st) {
@@ -88,40 +89,70 @@ function stateLabel(st) {
 }
 
 // --- HELP / GUIDANCE ---
+// --- HELP / GUIDANCE ---
 const HELP_ALL = `راهنمای دستورات 🤖
 
-📋 وضعیت و اطلاعات:
-/status — وضعیت فعلی ربات (هفته، حدیث، مرحله کار)
+📋 وضعیت:
+/status — وضعیت فعلی (هفته، حدیث، مرحله کار)
 /list — لیست جزءخوانی این هفته
-/preview — پیش‌نمایش پیامی که شنبه در گروه می‌رود
+/preview — پیش‌نمایش پیام شنبه
 /help — همین راهنما
 
-🗓️ مدیریت هفته:
+🗓️ هفته:
 /setweek <عدد> — رفتن به هفته دلخواه
 مثال: /setweek 17
-/skip — رد کردن هفته فعلی و رفتن به هفته بعد
-/reset — بازگشت به هفته فعلی بر اساس تاریخ
+/skip — رد هفته فعلی
+/reset — بازگشت به هفته تقویمی
 
-👥 مدیریت شرکت‌کنندگان:
-/admin — راهنمای دستورات شرکت‌کنندگان`;
+👥 اعضا:
+/members — لیست شماره‌دار اعضا
+/add <نام> — افزودن نفر جدید
+/del <شماره> — حذف نفر
+/edit <شماره> <نام جدید> — تغییر نام
+/admin — راهنمای مدیریت اعضا
 
-const HELP_ADMIN = `راهنمای شرکت‌کنندگان 👥
+مثال:
+/add فاطمه احمدی
+/del 12
+/edit 12 فاطمه رضایی`;
 
-/admin participants list — نمایش همه شرکت‌کنندگان
-/admin participants add <نام> [جزء] [هفته] [تلفن] — افزودن نفر جدید
-مثال: /admin participants add فاطمه 3 12
+const HELP_ADMIN = `راهنمای مدیریت اعضا 👥
 
-/admin participants remove <نام> — حذف نفر
-مثال: /admin participants remove سلیمانی
+اول /members را بزنید تا شماره هر نفر را ببینید.
+بعد فقط با شماره کار کنید — لازم نیست اسم را تایپ کنید.
 
-/admin participants update <نام> [جزء] [هفته] [تلفن] — ویرایش نفر
-مثال: /admin participants update سلیمانی 5
+/members — لیست شماره‌دار اعضا
+/add <نام> — افزودن نفر جدید
+/del <شماره یا نام> — حذف نفر
+/edit <شماره> <نام جدید> — تغییر نام
 
-⚠️ نکته: نام را دقیقاً مثل لیست بنویسید (فارسی).
-اول /admin participants list را بزنید تا نام‌ها را ببینید.`;
+مثال‌ها:
+/add فاطمه احمدی
+/del 12
+/edit 12 فاطمه رضایی
+
+تغییرات فوری اعمال می‌شوند؛ پیام شنبه از همین لیست ساخته می‌شود.`;
+
+// --- MEMBERS (KV override of PEOPLE; missing key = code list) ---
+function parseNum(str) {
+  const t = String(str === undefined || str === null ? '' : str).replace(/[0-9\u0660-\u0669\u06F0-\u06F9]/g, c => String(c.charCodeAt(0) & 15));
+  const n = parseInt(t, 10);
+  return isNaN(n) ? null : n;
+}
+const NUM_RE = new RegExp('^[0-9\u0660-\u0669\u06F0-\u06F9]+$');
+async function getPeople(kv) {
+  const a = await kv.get('member_names', 'json');
+  if (Array.isArray(a) && a.length) return a.slice();
+  return PEOPLE.slice();
+}
+async function saveMembers(kv, arr) {
+  const same = arr.length === PEOPLE.length && arr.every((v, i) => v === PEOPLE[i]);
+  if (same) await kv.delete('member_names');
+  else await kv.put('member_names', JSON.stringify(arr));
+}
 
 // --- MESSAGE BUILDERS ---
-function buildMsg(wn, hi) {
+function buildMsg(wn, hi, arr) {
   const h = HADITHS[hi % HADITHS.length];
   return `💠 قال الإمام الحسین علیه السلام
 
@@ -144,7 +175,7 @@ ${h.a}
 هفته ${toFA(wn)} ( ${dateRange(wn)} )
 
 سهم تلاوتی ⬅️ خانمها
-${juzList(wn)}`;
+${juzList(wn, arr)}`;
 }
 
 function buildReminder(wn, hi) {
@@ -236,7 +267,13 @@ async function handleUpdate(update, env) {
   if (!uid || !CONFIG.ADMINS.includes(uid)) return;
 
   const s = await getState(kv);
+  const people = await getPeople(kv);
   const text = msg.text || '';
+
+  if (msg.photo && s.st !== 'waiting_for_image') {
+    await sendMsg(env, uid, `📸 در حال حاضر عکسی لازم نیست.\nوضعیت: ${stateLabel(s.st)}\n\nجمعه شب یادآوری می‌آید؛ بعد عکس بفرستید.`);
+    return;
+  }
 
   if (msg.photo && s.st === 'waiting_for_image') {
     s.img = msg.photo[msg.photo.length - 1].file_id;
@@ -257,16 +294,16 @@ async function handleUpdate(update, env) {
     return;
   }
 
-  if (text === '/start') await sendMsg(env, uid, '🤖 ربات ختم قرآن\n\n🔹 روند کار:\n۱. جمعه شب ساعت ۹ → یادآوری + حدیث هفته\n۲. عکس محتوا رو بفرستید\n۳. پیش‌نمایش رو تایید کنید\n۴. شنبه ساعت ۸ صبح → ارسال در گروه\n\n🔹 دستورات:\n/status - وضعیت فعلی\n/list - لیست جزءخوانی هفته\n/preview - پیش‌نمایش پیام\n/setweek <عدد> - تنظیم دستی هفته\n/skip - رد کردن هفته\n/reset - بازنشانی\n/help - راهنمای کامل دستورات\n/admin - راهنمای شرکت‌کنندگان');
+  if (text === '/start') await sendMsg(env, uid, '🤖 ربات ختم قرآن\n\n🔹 روند کار:\n1. جمعه شب ساعت 9 → یادآوری + حدیث هفته\n2. عکس محتوا رو بفرستید\n3. پیش‌نمایش رو تایید کنید\n4. شنبه ساعت 8 صبح → ارسال در گروه\n\n🔹 دستورات:\n/status - وضعیت فعلی\n/list - لیست جزءخوانی هفته\n/preview - پیش‌نمایش پیام\n/members - لیست اعضا\n/add <نام> - افزودن عضو\n/setweek <عدد> - تنظیم هفته\n/skip - رد هفته\n/reset - بازنشانی\n/help - راهنما');
   else if (text === '/help') await sendMsg(env, uid, HELP_ALL);
   else if (text === '/status') {
     const dr = dateRange(s.cw);
     const stText = { idle: '🟢 آماده دریافت دستور', waiting_for_image: '📸 منتظر دریافت عکس', waiting_for_approval: '⏳ منتظر تایید شما', message_ready: '✅ پیام تایید شده - منتظر ارسال شنبه' };
     await sendMsg(env, uid, `📊 وضعیت ربات ختم قرآن\n\nهفته ${toFA(s.cw)} از ${toFA(CONFIG.TOTAL_WEEKS)}\nتاریخ: ${dr}\nحدیث: ${toFA((s.hi % HADITHS.length)+1)} از ${toFA(HADITHS.length)}\n\nوضعیت: ${stText[s.st] || s.st}`);
   }
-  else if (text === '/list') await sendMsg(env, uid, `👥 لیست جزءخوانی هفته ${toFA(s.cw)}\nتاریخ: ${dateRange(s.cw)}\n\nسهم تلاوتی ⬅️ خانمها\n\n${juzList(s.cw)}`);
+  else if (text === '/list') await sendMsg(env, uid, `👥 لیست جزءخوانی هفته ${toFA(s.cw)}\nتاریخ: ${dateRange(s.cw)}\n\nسهم تلاوتی ⬅️ خانمها\n\n${juzList(s.cw, people)}`);
   else if (text === '/preview') {
-    const previewMsg = s.msg || buildMsg(s.cw, s.hi);
+    const previewMsg = s.msg || buildMsg(s.cw, s.hi, people);
     await sendMsg(env, uid, `📋 پیش‌نمایش پیام هفته ${toFA(s.cw)}:\n\n${previewMsg}`);
   }
   else if (text.startsWith('/setweek ')) {
@@ -286,96 +323,39 @@ async function handleUpdate(update, env) {
     else if (text === '/admin' || text === '/admin help') {
       await sendMsg(env, uid, HELP_ADMIN);
     }
-    else if (text.startsWith('/admin participants')) {
-      // Admin command to manage participants via KV
-      const args = text.trim().split(/ +/);
-      const subcommand = args[1];
-    
-      if (subcommand === 'list') {
-        let participants = (await env.KV.get('bot_participants', 'json')) || [];
-        if (participants.length === 0) {
-          await sendMsg(env, uid, '👥 لیست شرکت‌کنندگان خالی است.\n\nبرای افزودن نفر:\n/admin participants add <نام> [جزء] [هفته]\nمثال: /admin participants add فاطمه 3 12');
-        } else {
-          let msg = '👥 لیست شرکت‌کنندگان:\n\n';
-          participants.forEach((p, index) => {
-            msg += `${index+1}. ${p.name} (جزء ${p.juz || 1}, هفته ${p.week || 1})`;
-            if (p.phone) msg += ` - 📞 ${p.phone}`;
-            msg += '\n';
-          });
-          msg += `\nبرای ویرایش: /admin participants update <نام>\nبرای حذف: /admin participants remove <نام>`;
-          await sendMsg(env, uid, msg);
-        }
+    else if (text === '/members') {
+      let m = `👥 اعضای ختم قرآن (${toFA(people.length)} نفر):\n\n`;
+      people.forEach((nm, i) => { m += `${toFA(i+1)}. ${nm}\n`; });
+      m += `\nتغییر نام: /edit <شماره> <نام جدید>\nحذف: /del <شماره>`;
+      await sendMsg(env, uid, m);
+    }
+    else if (text === '/add' || text.startsWith('/add ')) {
+      const name = text.slice(4).trim();
+      if (!name) await sendMsg(env, uid, `❌ نام را هم بنویسید.\nمثال: /add فاطمه احمدی`);
+      else if (name.length > 60) await sendMsg(env, uid, `❌ نام خیلی طولانی است (حداکثر 60 حرف).`);
+      else { people.push(name); await saveMembers(kv, people); await sendMsg(env, uid, `✅ «${name}» اضافه شد (شماره ${toFA(people.length)}).`); }
+    }
+    else if (text === '/del' || text.startsWith('/del ')) {
+      const arg = text.slice(4).trim();
+      if (!arg) await sendMsg(env, uid, `❌ شماره یا نام را هم بنویسید.\nمثال: /del 12`);
+      else if (NUM_RE.test(arg)) {
+        const n = parseNum(arg);
+        if (n < 1 || n > people.length) await sendMsg(env, uid, `❌ شماره باید بین 1 تا ${toFA(people.length)} باشد.\n/members را بزنید.`);
+        else { const nm = people.splice(n-1, 1)[0]; await saveMembers(kv, people); await sendMsg(env, uid, `✅ «${nm}» (شماره ${toFA(n)}) حذف شد.`); }
+      } else {
+        const ix = people.indexOf(arg);
+        if (ix === -1) await sendMsg(env, uid, `❌ «${arg}» در لیست نیست.\n/members را بزنید و با شماره حذف کنید: /del <شماره>`);
+        else { people.splice(ix, 1); await saveMembers(kv, people); await sendMsg(env, uid, `✅ «${arg}» حذف شد.`); }
       }
-      else if (subcommand === 'add') {
-        if (args.length < 3) {
-          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants add <نام> [جزء] [هفته] [تلفن]\n\nمثال:\n/admin participants add فاطمه 3 12');
-          return;
-        }
-        const name = args[2];
-        const juz = parseInt(args[3]) || 1;
-        const week = parseInt(args[4]) || 1;
-        const phone = args[5] || '';
-        const notes = args.slice(6).join(' ') || '';
-      
-        let participants = (await env.KV.get('bot_participants', 'json')) || [];
-        const exists = participants.some(p => p.name === name);
-        if (exists) {
-          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${name}" از قبل وجود دارد.`);
-          return;
-        }
-      
-        const newParticipant = { name, juz, week, phone, notes, id: Date.now(), createdAt: new Date().toISOString() };
-        participants.push(newParticipant);
-        await env.KV.put('bot_participants', JSON.stringify(participants));
-        await sendMsg(env, uid, `✅ شرکت‌کننده "${name}" اضافه شد.`);
-      }
-      else if (subcommand === 'remove') {
-        if (args.length < 3) {
-          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants remove <نام>\n\nمثال:\n/admin participants remove سلیمانی');
-          return;
-        }
-        const nameToRemove = args[2];
-      
-        let participants = (await env.KV.get('bot_participants', 'json')) || [];
-        const initialLength = participants.length;
-        participants = participants.filter(p => p.name !== nameToRemove);
-      
-        if (participants.length === initialLength) {
-          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${nameToRemove}" یافت نشد.`);
-        } else {
-          await env.KV.put('bot_participants', JSON.stringify(participants));
-          await sendMsg(env, uid, `✅ شرکت‌کننده "${nameToRemove}" حذف شد.`);
-        }
-      }
-      else if (subcommand === 'update') {
-        if (args.length < 3) {
-          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants update <نام> [جزء] [هفته] [تلفن]\n\nمثال:\n/admin participants update سلیمانی 5');
-          return;
-        }
-        const name = args[2];
-        const juz = parseInt(args[3]);
-        const week = parseInt(args[4]);
-        const phone = args[5];
-        const notes = args.slice(6).join(' ');
-      
-        let participants = (await env.KV.get('bot_participants', 'json')) || [];
-        const participant = participants.find(p => p.name === name);
-        if (!participant) {
-          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${name}" یافت نشد.`);
-          return;
-        }
-      
-        if (!isNaN(juz)) participant.juz = juz;
-        if (!isNaN(week)) participant.week = week;
-        if (phone !== undefined) participant.phone = phone;
-        if (notes !== undefined) participant.notes = notes;
-      
-        await env.KV.put('bot_participants', JSON.stringify(participants));
-        await sendMsg(env, uid, `✅ شرکت‌کننده "${name}" به‌روزرسانی شد.`);
-      }
-      else {
-        await sendMsg(env, uid, `❌ زیردستور «${subcommand || '(خالی)'}» شناخته نشد.\n\n${HELP_ADMIN}`);
-      }
+    }
+    else if (text === '/edit' || text.startsWith('/edit ')) {
+      const parts = text.slice(5).trim().split(/\s+/);
+      const okNum = parts[0] !== '' && NUM_RE.test(parts[0]);
+      const n = okNum ? parseNum(parts[0]) : null;
+      const newName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+      if (n === null || !newName) await sendMsg(env, uid, `❌ شیوه درست:\n/edit <شماره> <نام جدید>\nمثال: /edit 12 فاطمه رضایی`);
+      else if (n < 1 || n > people.length) await sendMsg(env, uid, `❌ شماره باید بین 1 تا ${toFA(people.length)} باشد.`);
+      else { const old = people[n-1]; people[n-1] = newName; await saveMembers(kv, people); await sendMsg(env, uid, `✅ شماره ${toFA(n)} از «${old}» به «${newName}» تغییر کرد.`); }
     }
     else if (text.startsWith('/')) {
       await sendMsg(env, uid, `❌ دستور «${text.split(' ')[0]}» شناخته نشد.\n\n${HELP_ALL}`);
@@ -404,7 +384,7 @@ async function handleCron(env) {
   if (d === 5 && h >= 21 && s.st === 'idle' && s.cw <= CONFIG.TOTAL_WEEKS) {
     const fk = `reminded_w${s.cw}`;
     if (!flags[fk]) {
-      s.msg = buildMsg(s.cw, s.hi);
+      s.msg = buildMsg(s.cw, s.hi, await getPeople(kv));
       s.st = 'waiting_for_image';
       await saveState(kv, s);
       let sentAll = true;
@@ -506,108 +486,6 @@ export default {
     if (url.pathname === '/api/flags') {
           const f = await env.KV.get('cron_flags', 'json') || {};
           return new Response(JSON.stringify(f, null, 2), { headers: { 'Content-Type': 'application/json' } });
-        }
-
-        // NEW: Admin API endpoints for admin panel inside the bot
-        if (url.pathname === '/api/admin') {
-          const method = request.method;
-          const body = await request.json().catch(() => ({}));
-          const adminId = body?.adminId || '';
-      
-          // Verify admin
-          if (!CONFIG.ADMINS.includes(parseInt(adminId))) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-              status: 403,
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-      
-          // GET: List participants
-          if (method === 'GET') {
-            const raw = await env.KV.get('bot_participants', 'json');
-            const participants = raw || [];
-            return new Response(JSON.stringify({ participants }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-      
-          // POST: Add participant
-          if (method === 'POST') {
-            const { name, juz, week, phone, notes } = body;
-            if (!name) {
-              return new Response(JSON.stringify({ error: 'Name required' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-              });
-            }
-        
-            const newParticipant = {
-              name,
-              juz: parseInt(juz) || 1,
-              week: parseInt(week) || 1,
-              phone: phone || '',
-              notes: notes || '',
-              id: Date.now(),
-              createdAt: new Date().toISOString()
-            };
-        
-            let participants = (await env.KV.get('bot_participants', 'json')) || [];
-            participants.push(newParticipant);
-        
-            await env.KV.put('bot_participants', JSON.stringify(participants));
-            return new Response(JSON.stringify({ success: true, participant: newParticipant }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-      
-          // DELETE: Remove participant
-          if (method === 'DELETE') {
-            const { name } = body;
-            if (!name) {
-              return new Response(JSON.stringify({ error: 'Name required' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-              });
-            }
-        
-            let participants = (await env.KV.get('bot_participants', 'json')) || [];
-            participants = participants.filter(p => p.name !== name);
-        
-            await env.KV.put('bot_participants', JSON.stringify(participants));
-            return new Response(JSON.stringify({ success: true, removed: name }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-      
-          // PUT: Update participant
-          if (method === 'PUT') {
-            const { name, juz, week, phone, notes } = body;
-            if (!name) {
-              return new Response(JSON.stringify({ error: 'Name required' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-              });
-            }
-        
-            let participants = (await env.KV.get('bot_participants', 'json')) || [];
-            const participant = participants.find(p => p.name === name);
-            if (participant) {
-              participant.juz = parseInt(juz) || participant.juz;
-              participant.week = parseInt(week) || participant.week;
-              participant.phone = phone || participant.phone;
-              participant.notes = notes || participant.notes;
-            }
-        
-            await env.KV.put('bot_participants', JSON.stringify(participants));
-            return new Response(JSON.stringify({ success: true, participant }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-      
-          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json' }
-          });
         }
 
         return new Response('Not Found', { status: 404 });
