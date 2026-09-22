@@ -242,14 +242,104 @@ async function handleUpdate(update, env) {
   }
   else if (text === '/skip') { s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`⏭️ رد شد. هفته بعد: ${toFA(s.cw)}`); }
   else if (text === '/reset') {
-    const w1 = new Date(Date.UTC(2026,5,12));
-    const cw = Math.min(Math.max(Math.floor((Date.now() - w1.getTime()) / 864e5 / 7) + 1, 1), CONFIG.TOTAL_WEEKS);
-    const hi = Math.max(0, cw-6);
-    s.cw = cw; s.hi = hi; s.st='idle'; s.img=null; s.msg=null; s.pv=null;
-    await saveState(kv, s);
-    await sendMsg(env, uid, `✅ بازنشانی شد.\nهفته فعلی: ${toFA(cw)} (${dateRange(cw)})`);
+      const w1 = new Date(Date.UTC(2026,5,12));
+      const cw = Math.min(Math.max(Math.floor((Date.now() - w1.getTime()) / 864e5 / 7) + 1, 1), CONFIG.TOTAL_WEEKS);
+      const hi = Math.max(0, cw-6);
+      s.cw = cw; s.hi = hi; s.st='idle'; s.img=null; s.msg=null; s.pv=null;
+      await saveState(kv, s);
+      await sendMsg(env, uid, `✅ بازنشانی شد.\nهفته فعلی: ${toFA(cw)} (${dateRange(cw)})`);
+    }
+    else if (text.startsWith('/admin participants')) {
+      // Admin command to manage participants via KV
+      const args = text.trim().split(/ +/);
+      const subcommand = args[1];
+    
+      if (subcommand === 'list') {
+        let participants = (await env.KV.get('bot_participants', 'json')) || [];
+        if (participants.length === 0) {
+          await sendMsg(env, uid, '👥 لیست شرکت‌کنندگان خالی است.');
+        } else {
+          let msg = '👥 لیست شرکت‌کنندگان:\n\n';
+          participants.forEach((p, index) => {
+            msg += `${index+1}. ${p.name} (جزء ${p.juz || 1}, هفته ${p.week || 1})`;
+            if (p.phone) msg += ` - 📞 ${p.phone}`;
+            msg += '\n';
+          });
+          await sendMsg(env, uid, msg);
+        }
+      }
+      else if (subcommand === 'add') {
+        if (args.length < 3) {
+          await sendMsg(env, uid, '❌ استفاده: /admin participants add <name> [juz] [week] [phone] [notes]');
+          return;
+        }
+        const name = args[2];
+        const juz = parseInt(args[3]) || 1;
+        const week = parseInt(args[4]) || 1;
+        const phone = args[5] || '';
+        const notes = args.slice(6).join(' ') || '';
+      
+        let participants = (await env.KV.get('bot_participants', 'json')) || [];
+        const exists = participants.some(p => p.name === name);
+        if (exists) {
+          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${name}" از قبل وجود دارد.`);
+          return;
+        }
+      
+        const newParticipant = { name, juz, week, phone, notes, id: Date.now(), createdAt: new Date().toISOString() };
+        participants.push(newParticipant);
+        await env.KV.put('bot_participants', JSON.stringify(participants));
+        await sendMsg(env, uid, `✅ شرکت‌کننده "${name}" اضافه شد.`);
+      }
+      else if (subcommand === 'remove') {
+        if (args.length < 3) {
+          await sendMsg(env, uid, '❌ استفاده: /admin participants remove <name>');
+          return;
+        }
+        const nameToRemove = args[2];
+      
+        let participants = (await env.KV.get('bot_participants', 'json')) || [];
+        const initialLength = participants.length;
+        participants = participants.filter(p => p.name !== nameToRemove);
+      
+        if (participants.length === initialLength) {
+          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${nameToRemove}" یافت نشد.`);
+        } else {
+          await env.KV.put('bot_participants', JSON.stringify(participants));
+          await sendMsg(env, uid, `✅ شرکت‌کننده "${nameToRemove}" حذف شد.`);
+        }
+      }
+      else if (subcommand === 'update') {
+        if (args.length < 3) {
+          await sendMsg(env, uid, '❌ استفاده: /admin participants update <name> [juz] [week] [phone] [notes]');
+          return;
+        }
+        const name = args[2];
+        const juz = parseInt(args[3]);
+        const week = parseInt(args[4]);
+        const phone = args[5];
+        const notes = args.slice(6).join(' ');
+      
+        let participants = (await env.KV.get('bot_participants', 'json')) || [];
+        const participant = participants.find(p => p.name === name);
+        if (!participant) {
+          await sendMsg(env, uid, `❌ شرکت‌کننده با نام "${name}" یافت نشد.`);
+          return;
+        }
+      
+        if (!isNaN(juz)) participant.juz = juz;
+        if (!isNaN(week)) participant.week = week;
+        if (phone !== undefined) participant.phone = phone;
+        if (notes !== undefined) participant.notes = notes;
+      
+        await env.KV.put('bot_participants', JSON.stringify(participants));
+        await sendMsg(env, uid, `✅ شرکت‌کننده "${name}" به‌روزرسانی شد.`);
+      }
+      else {
+        await sendMsg(env, uid, '❌ دستورات پشتیبانی شده:\n/list - نمایش شرکت‌کنندگان\n/add <name> [juz] [week] [phone] [notes] - افزودن\n/remove <name> - حذف\n/update <name> [juz] [week] [phone] [notes] - به‌روزرسانی');
+      }
+    }
   }
-}
 
 // --- CRON HANDLER (exact times only) ---
 async function handleCron(env) {
@@ -282,25 +372,29 @@ async function handleCron(env) {
   }
 
   // Saturday 08:00–23:59 → post to group (once per week, flag-protected)
-  if (d === 6 && h >= 8 && s.st === 'message_ready') {
-    const pk = `posted_w${s.cw}`;
-    if (!flags[pk]) {
-      let ok = false;
-      if (s.img && s.msg && s.msg.length > 1000) {
-        const r1 = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `📸 هفته ${toFA(s.cw)}`);
-        const r2 = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
-        ok = r1.ok && r2.ok;
+    if (d === 6 && h >= 8 && s.st === 'message_ready') {
+      const pk = `posted_w${s.cw}`;
+      if (!flags[pk]) {
+        let ok = false;
+      
+        // FIX: Send single message with photo + caption (no separate messages)
+        if (s.img) {
+          const captionText = `📸 هفته ${toFA(s.cw)}\n\n${s.msg}`;
+          const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, captionText);
+          ok = r.ok;
+        } else {
+          const r = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
+          ok = r.ok;
+        }
+      
+        if (ok) {
+          s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null;
+          await saveState(kv, s);
+          flags[pk] = 1; await kv.put('cron_flags', JSON.stringify(flags));
+        }
       }
-      else if (s.img) { const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, s.msg); ok = r.ok; }
-      else { const r = await sendMsg(env, CONFIG.GROUP_ID, s.msg); ok = r.ok; }
-      if (ok) {
-        s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null;
-        await saveState(kv, s);
-        flags[pk] = 1; await kv.put('cron_flags', JSON.stringify(flags));
-      }
+      return;
     }
-    return;
-  }
 
   // Saturday 10:00–23:59 warn admin if not ready
   if (d === 6 && h >= 10 && s.st !== 'message_ready' && s.st !== 'idle') {
@@ -362,11 +456,113 @@ export default {
     if (url.pathname === '/api/status') return new Response(JSON.stringify(await getState(env.KV), null, 2), { headers: { 'Content-Type': 'application/json' } });
 
     if (url.pathname === '/api/flags') {
-      const f = await env.KV.get('cron_flags', 'json') || {};
-      return new Response(JSON.stringify(f, null, 2), { headers: { 'Content-Type': 'application/json' } });
-    }
+          const f = await env.KV.get('cron_flags', 'json') || {};
+          return new Response(JSON.stringify(f, null, 2), { headers: { 'Content-Type': 'application/json' } });
+        }
 
-    return new Response('Not Found', { status: 404 });
+        // NEW: Admin API endpoints for admin panel inside the bot
+        if (url.pathname === '/api/admin') {
+          const method = request.method;
+          const body = await request.json().catch(() => ({}));
+          const adminId = body?.adminId || '';
+      
+          // Verify admin
+          if (!CONFIG.ADMINS.includes(parseInt(adminId))) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+              status: 403,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+      
+          // GET: List participants
+          if (method === 'GET') {
+            const raw = await env.KV.get('bot_participants', 'json');
+            const participants = raw || [];
+            return new Response(JSON.stringify({ participants }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+      
+          // POST: Add participant
+          if (method === 'POST') {
+            const { name, juz, week, phone, notes } = body;
+            if (!name) {
+              return new Response(JSON.stringify({ error: 'Name required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+        
+            const newParticipant = {
+              name,
+              juz: parseInt(juz) || 1,
+              week: parseInt(week) || 1,
+              phone: phone || '',
+              notes: notes || '',
+              id: Date.now(),
+              createdAt: new Date().toISOString()
+            };
+        
+            let participants = (await env.KV.get('bot_participants', 'json')) || [];
+            participants.push(newParticipant);
+        
+            await env.KV.put('bot_participants', JSON.stringify(participants));
+            return new Response(JSON.stringify({ success: true, participant: newParticipant }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+      
+          // DELETE: Remove participant
+          if (method === 'DELETE') {
+            const { name } = body;
+            if (!name) {
+              return new Response(JSON.stringify({ error: 'Name required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+        
+            let participants = (await env.KV.get('bot_participants', 'json')) || [];
+            participants = participants.filter(p => p.name !== name);
+        
+            await env.KV.put('bot_participants', JSON.stringify(participants));
+            return new Response(JSON.stringify({ success: true, removed: name }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+      
+          // PUT: Update participant
+          if (method === 'PUT') {
+            const { name, juz, week, phone, notes } = body;
+            if (!name) {
+              return new Response(JSON.stringify({ error: 'Name required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+        
+            let participants = (await env.KV.get('bot_participants', 'json')) || [];
+            const participant = participants.find(p => p.name === name);
+            if (participant) {
+              participant.juz = parseInt(juz) || participant.juz;
+              participant.week = parseInt(week) || participant.week;
+              participant.phone = phone || participant.phone;
+              participant.notes = notes || participant.notes;
+            }
+        
+            await env.KV.put('bot_participants', JSON.stringify(participants));
+            return new Response(JSON.stringify({ success: true, participant }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+      
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response('Not Found', { status: 404 });
   },
 
   async scheduled(event, env, ctx) {
