@@ -87,6 +87,39 @@ function stateLabel(st) {
   return m[st] || st;
 }
 
+// --- HELP / GUIDANCE ---
+const HELP_ALL = `راهنمای دستورات 🤖
+
+📋 وضعیت و اطلاعات:
+/status — وضعیت فعلی ربات (هفته، حدیث، مرحله کار)
+/list — لیست جزءخوانی این هفته
+/preview — پیش‌نمایش پیامی که شنبه در گروه می‌رود
+/help — همین راهنما
+
+🗓️ مدیریت هفته:
+/setweek <عدد> — رفتن به هفته دلخواه
+مثال: /setweek 17
+/skip — رد کردن هفته فعلی و رفتن به هفته بعد
+/reset — بازگشت به هفته فعلی بر اساس تاریخ
+
+👥 مدیریت شرکت‌کنندگان:
+/admin — راهنمای دستورات شرکت‌کنندگان`;
+
+const HELP_ADMIN = `راهنمای شرکت‌کنندگان 👥
+
+/admin participants list — نمایش همه شرکت‌کنندگان
+/admin participants add <نام> [جزء] [هفته] [تلفن] — افزودن نفر جدید
+مثال: /admin participants add فاطمه 3 12
+
+/admin participants remove <نام> — حذف نفر
+مثال: /admin participants remove سلیمانی
+
+/admin participants update <نام> [جزء] [هفته] [تلفن] — ویرایش نفر
+مثال: /admin participants update سلیمانی 5
+
+⚠️ نکته: نام را دقیقاً مثل لیست بنویسید (فارسی).
+اول /admin participants list را بزنید تا نام‌ها را ببینید.`;
+
 // --- MESSAGE BUILDERS ---
 function buildMsg(wn, hi) {
   const h = HADITHS[hi % HADITHS.length];
@@ -224,7 +257,8 @@ async function handleUpdate(update, env) {
     return;
   }
 
-  if (text === '/start') await sendMsg(env, uid, '🤖 ربات ختم قرآن\n\n🔹 روند کار:\n۱. جمعه شب ساعت ۹ → یادآوری + حدیث هفته\n۲. عکس محتوا رو بفرستید\n۳. پیش‌نمایش رو تایید کنید\n۴. شنبه ساعت ۸ صبح → ارسال در گروه\n\n🔹 دستورات:\n/status - وضعیت فعلی\n/list - لیست جزءخوانی هفته\n/preview - پیش‌نمایش پیام\n/setweek <عدد> - تنظیم دستی هفته\n/skip - رد کردن هفته\n/reset - بازنشانی');
+  if (text === '/start') await sendMsg(env, uid, '🤖 ربات ختم قرآن\n\n🔹 روند کار:\n۱. جمعه شب ساعت ۹ → یادآوری + حدیث هفته\n۲. عکس محتوا رو بفرستید\n۳. پیش‌نمایش رو تایید کنید\n۴. شنبه ساعت ۸ صبح → ارسال در گروه\n\n🔹 دستورات:\n/status - وضعیت فعلی\n/list - لیست جزءخوانی هفته\n/preview - پیش‌نمایش پیام\n/setweek <عدد> - تنظیم دستی هفته\n/skip - رد کردن هفته\n/reset - بازنشانی\n/help - راهنمای کامل دستورات\n/admin - راهنمای شرکت‌کنندگان');
+  else if (text === '/help') await sendMsg(env, uid, HELP_ALL);
   else if (text === '/status') {
     const dr = dateRange(s.cw);
     const stText = { idle: '🟢 آماده دریافت دستور', waiting_for_image: '📸 منتظر دریافت عکس', waiting_for_approval: '⏳ منتظر تایید شما', message_ready: '✅ پیام تایید شده - منتظر ارسال شنبه' };
@@ -238,7 +272,7 @@ async function handleUpdate(update, env) {
   else if (text.startsWith('/setweek ')) {
     const n = parseInt(text.split(' ')[1]);
     if (n >= 1 && n <= CONFIG.TOTAL_WEEKS) { s.cw = n; s.hi = Math.max(0,n-6); s.st = 'idle'; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`✅ هفته ${toFA(n)} تنظیم شد.`); }
-    else await sendMsg(env, uid, `❌ عدد بین ۱ تا ${toFA(CONFIG.TOTAL_WEEKS)}`);
+    else await sendMsg(env, uid, `❌ عدد بین ۱ تا ${toFA(CONFIG.TOTAL_WEEKS)} وارد کنید.\nمثال: /setweek 17`);
   }
   else if (text === '/skip') { s.st='idle'; s.cw++; s.hi++; s.img=null; s.msg=null; s.pv=null; await saveState(kv,s); await sendMsg(env,uid,`⏭️ رد شد. هفته بعد: ${toFA(s.cw)}`); }
   else if (text === '/reset') {
@@ -249,6 +283,9 @@ async function handleUpdate(update, env) {
       await saveState(kv, s);
       await sendMsg(env, uid, `✅ بازنشانی شد.\nهفته فعلی: ${toFA(cw)} (${dateRange(cw)})`);
     }
+    else if (text === '/admin' || text === '/admin help') {
+      await sendMsg(env, uid, HELP_ADMIN);
+    }
     else if (text.startsWith('/admin participants')) {
       // Admin command to manage participants via KV
       const args = text.trim().split(/ +/);
@@ -257,7 +294,7 @@ async function handleUpdate(update, env) {
       if (subcommand === 'list') {
         let participants = (await env.KV.get('bot_participants', 'json')) || [];
         if (participants.length === 0) {
-          await sendMsg(env, uid, '👥 لیست شرکت‌کنندگان خالی است.');
+          await sendMsg(env, uid, '👥 لیست شرکت‌کنندگان خالی است.\n\nبرای افزودن نفر:\n/admin participants add <نام> [جزء] [هفته]\nمثال: /admin participants add فاطمه 3 12');
         } else {
           let msg = '👥 لیست شرکت‌کنندگان:\n\n';
           participants.forEach((p, index) => {
@@ -265,12 +302,13 @@ async function handleUpdate(update, env) {
             if (p.phone) msg += ` - 📞 ${p.phone}`;
             msg += '\n';
           });
+          msg += `\nبرای ویرایش: /admin participants update <نام>\nبرای حذف: /admin participants remove <نام>`;
           await sendMsg(env, uid, msg);
         }
       }
       else if (subcommand === 'add') {
         if (args.length < 3) {
-          await sendMsg(env, uid, '❌ استفاده: /admin participants add <name> [juz] [week] [phone] [notes]');
+          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants add <نام> [جزء] [هفته] [تلفن]\n\nمثال:\n/admin participants add فاطمه 3 12');
           return;
         }
         const name = args[2];
@@ -293,7 +331,7 @@ async function handleUpdate(update, env) {
       }
       else if (subcommand === 'remove') {
         if (args.length < 3) {
-          await sendMsg(env, uid, '❌ استفاده: /admin participants remove <name>');
+          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants remove <نام>\n\nمثال:\n/admin participants remove سلیمانی');
           return;
         }
         const nameToRemove = args[2];
@@ -311,7 +349,7 @@ async function handleUpdate(update, env) {
       }
       else if (subcommand === 'update') {
         if (args.length < 3) {
-          await sendMsg(env, uid, '❌ استفاده: /admin participants update <name> [juz] [week] [phone] [notes]');
+          await sendMsg(env, uid, '❌ نام وارد نشده.\n\nشیوه درست:\n/admin participants update <نام> [جزء] [هفته] [تلفن]\n\nمثال:\n/admin participants update سلیمانی 5');
           return;
         }
         const name = args[2];
@@ -336,7 +374,17 @@ async function handleUpdate(update, env) {
         await sendMsg(env, uid, `✅ شرکت‌کننده "${name}" به‌روزرسانی شد.`);
       }
       else {
-        await sendMsg(env, uid, '❌ دستورات پشتیبانی شده:\n/list - نمایش شرکت‌کنندگان\n/add <name> [juz] [week] [phone] [notes] - افزودن\n/remove <name> - حذف\n/update <name> [juz] [week] [phone] [notes] - به‌روزرسانی');
+        await sendMsg(env, uid, `❌ زیردستور «${subcommand || '(خالی)'}» شناخته نشد.\n\n${HELP_ADMIN}`);
+      }
+    }
+    else if (text.startsWith('/')) {
+      await sendMsg(env, uid, `❌ دستور «${text.split(' ')[0]}» شناخته نشد.\n\n${HELP_ALL}`);
+    }
+    else if (text.trim() !== '') {
+      if (s.st === 'waiting_for_image') {
+        await sendMsg(env, uid, '📸 ربات منتظر عکس هفته است — لطفاً عکس محتوا را بفرستید.\n\n(برای لغو وضعیت: /status را ببینید یا /reset بزنید)');
+      } else {
+        await sendMsg(env, uid, '💡 پیام شما دریافت شد، ولی ربات فقط دستورات را می‌شناسد.\n\n/help — راهنمای کامل دستورات\n/admin — راهنمای شرکت‌کنندگان');
       }
     }
   }
