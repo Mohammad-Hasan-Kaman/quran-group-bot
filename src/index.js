@@ -279,14 +279,10 @@ async function handleUpdate(update, env) {
     s.st = 'waiting_for_approval';
     await saveState(kv, s);
     const pv = `📋 پیش‌نمایش پیام هفته ${toFA(s.cw)}:\n\n${s.msg}`;
-    if (pv.length > 4000) {
+    const pr = await sendPhoto(env, uid, s.img, pv);
+    if (!pr.ok) {
       await sendPhoto(env, uid, s.img, `📸 عکس هفته ${toFA(s.cw)}`);
-      await sendMsg(env, uid, s.msg.substring(0, 3900));
-    } else if (s.msg.length > 1000) {
-      await sendPhoto(env, uid, s.img, `📸 عکس هفته ${toFA(s.cw)}`);
-      await sendMsg(env, uid, pv.length > 4000 ? s.msg.substring(0, 3900) : pv);
-    } else {
-      await sendPhoto(env, uid, s.img, pv);
+      await sendMsg(env, uid, pv);
     }
     const kb = { inline_keyboard: [[{ text: '✅ تایید', callback_data: 'approve' }, { text: '❌ رد', callback_data: 'reject' }]] };
     await sendMsg(env, uid, 'آیا پیام تایید می‌شود؟', kb);
@@ -404,15 +400,16 @@ async function handleCron(env) {
       if (!flags[pk]) {
         let ok = false;
       
-        // FIX: Send single message with photo + caption (no separate messages)
+        // One message: photo + full text as caption (Bale accepts long captions).
+        // Fallback only if Bale rejects: short-caption photo + separate text.
         if (s.img) {
-          if (s.msg.length > 1000) {
-            const r1 = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `\u0639\u06a9 \u0647\u0641\u062a ${toFA(s.cw)}`);
+          const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, s.msg);
+          if (r.ok) {
+            ok = true;
+          } else {
+            const r1 = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `📸 عکس هفته ${toFA(s.cw)}`);
             const r2 = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
             ok = r1.ok && r2.ok;
-          } else {
-            const r = await sendPhoto(env, CONFIG.GROUP_ID, s.img, `\u0639\u06a9 \u0647\u0641\u062a ${toFA(s.cw)}\n\n${s.msg}`);
-            ok = r.ok;
           }
         } else {
           const r = await sendMsg(env, CONFIG.GROUP_ID, s.msg);
