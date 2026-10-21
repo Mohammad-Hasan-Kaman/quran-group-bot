@@ -12,7 +12,7 @@ Bale Messenger bot for automated weekly Quran juz reading group management.
 This bot manages a 30-person Quran reading circle where:
 - **30 participants** each read one juz per week
 - Juz numbers **rotate weekly** (+1 each week, wrapping around)
-- A **weekly hadith** from Imam Hussain (ع) is shared with an image
+- A **weekly hadith** from Imam Hussain is shared with an image
 - Messages are posted **every Saturday at 8 AM** (Iran time)
 - Admin receives a **Friday night reminder** to prepare content
 
@@ -70,9 +70,9 @@ juz = (person_index + week_number - 1) % 30 + 1
 ```
 
 Example for week 5:
-- Person 0 (جواهریان): juz 5
-- Person 25 (نینا خانم): juz 30
-- Person 26 (زهرا سعدی راد): juz 1 (wrapped)
+- Person 0 (Javaherian): juz 5
+- Person 25 (Nina): juz 30
+- Person 26 (Zahra Sadeghi Rad): juz 1 (wrapped)
 
 ## Setup
 
@@ -209,8 +209,8 @@ Edit the `HADITHS` array in `src/index.js`:
 ```javascript
 const HADITHS = [
   {
-    text: 'متن حدیث...',
-    source: 'منبع حدیث...',
+    text: 'The hadith text...',
+    source: 'The hadith source...',
   },
   // ... more hadiths
 ];
@@ -223,10 +223,10 @@ The member list is stored in KV (`member_names`) and can be modified **at runtim
 | Command | Example | Effect |
 |---------|---------|--------|
 | `/members` | — | Show numbered list |
-| `/add <name>` | `/add فاطمه احمدی` | Append member |
+| `/add <name>` | `/add Fatemeh Ahmadi` | Append member |
 | `/del <number>` | `/del 12` | Remove by number |
-| `/del <name>` | `/del سلیمانی` | Remove by exact name |
-| `/edit <number> <new>` | `/edit 12 فاطمه رضایی` | Rename member |
+| `/del <name>` | `/del Soleimani` | Remove by exact name |
+| `/edit <number> <new>` | `/edit 12 Fatemeh Rezaei` | Rename member |
 
 Juz rotation uses `CONFIG.TOTAL_JUZ` (30), so wrap is always 1→30 regardless of member count.
 
