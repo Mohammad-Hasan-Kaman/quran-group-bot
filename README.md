@@ -111,7 +111,7 @@ The bot token is **not** stored in the code. Set it as a Cloudflare Worker secre
 npx wrangler secret put BOT_TOKEN
 ```
 
-Paste your Bale bot token when prompted (get it from [@BotFather](https://tapi.bale.ai/BotFather) in Bale).
+Paste your Bale bot token when prompted (get it from [@BotFather](https://ble.ir/botfather) in Bale).
 
 > ⚠️ Never hardcode the token in `src/index.js`. The worker reads it from the environment (`env.BOT_TOKEN`) at runtime.
 
