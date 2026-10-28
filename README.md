@@ -1,3 +1,9 @@
+### 🌐 Telegram: [@mohaka_programmer](https://t.me/mohaka_programmer)
+
+[![Telegram](https://img.shields.io/badge/Telegram-%40mohaka__programmer-2CA5E0?logo=telegram&logoColor=white)](https://t.me/mohaka_programmer)
+
+---
+
 # 🤲 Quran Group Bot
 
 ![Version](https://img.shields.io/badge/version-1.2.1-blue?style=for-the-badge)
